@@ -38,33 +38,17 @@ const DASH_PASS = process.env.DASHBOARD_PASSWORD || 'ChangeMe-8842';
 // Greeting shown on first contact — includes the numbered menu
 const GREETING = 'Hey \u{1F44B}\n' +
   'Your ticket has been received and we\'ll get back to you within 4 hours.\n\n' +
-  'Meanwhile, I can try a quick fix! What\'s the issue? Reply with a number:\n' +
-  '1\uFE0F\u20E3 WiFi / Internet\n' +
-  '2\uFE0F\u20E3 Password / login / 2FA\n' +
-  '3\uFE0F\u20E3 Email\n' +
-  '4\uFE0F\u20E3 Printer\n' +
-  '5\uFE0F\u20E3 Mac slow or frozen\n' +
-  '6\uFE0F\u20E3 Software (Zoom, Adobe, etc.)\n' +
-  '7\uFE0F\u20E3 Something else\n\n' +
-  'Or just describe your problem and I\'ll try to help!';
+  'Meanwhile, I\'m your AI Tier-1 IT assistant. What seems to be the problem?\n' +
+  'You can just describe the issue (e.g., "my laptop won\'t turn on", "I can\'t login to Zoom", etc.) and I\'ll try to help!';
 
 // Shortened menu for follow-up prompts
-const MENU = 'What else can I help with? Reply with a number:\n' +
-  '1\uFE0F\u20E3 WiFi / Internet\n' +
-  '2\uFE0F\u20E3 Password / login / 2FA\n' +
-  '3\uFE0F\u20E3 Email\n' +
-  '4\uFE0F\u20E3 Printer\n' +
-  '5\uFE0F\u20E3 Mac slow or frozen\n' +
-  '6\uFE0F\u20E3 Software (Zoom, Adobe, etc.)\n' +
-  '7\uFE0F\u20E3 Something else';
+const MENU = 'What else can I help with? Just describe the issue.';
 
 const TOPICS = {
-  wifi: "Let's try this for WiFi / Internet:\n1) Turn WiFi off and back on.\n2) Forget the network and rejoin it.\n3) If you can, restart the router.\n\nDid that fix it? Reply YES or NO.",
-  password: "For login / 2FA:\n1) Set your phone clock to automatic (Settings > General > Date & Time).\n2) Request a fresh code and enter it quickly.\n3) For passwords, use the company SSO reset link.\n\nDid that fix it? Reply YES or NO.",
-  email: "For email:\n1) Check your internet connection.\n2) Sign out and back into your mail app.\n3) Use 'Continue with Google' with your company email.\n\nDid that fix it? Reply YES or NO.",
-  printer: "For the printer:\n1) Make sure it's on and on the same WiFi.\n2) Remove and re-add it in System Settings > Printers & Scanners.\n3) Print a test page.\n\nDid that fix it? Reply YES or NO.",
-  mac: "For a slow or frozen Mac:\n1) Press Command + Option + Escape to force-quit a stuck app.\n2) Check free storage: Apple menu > System Settings > General > Storage.\n3) Restart the Mac.\n\nDid that fix it? Reply YES or NO.",
-  software: "For Zoom / Adobe / SSO apps:\n1) Open the app and click 'Continue with Google'.\n2) Use your company email, not a password.\n3) Try an Incognito window to avoid personal-account conflicts.\n\nDid that fix it? Reply YES or NO.",
+  mac: "For macOS issues (slow, frozen): Press Cmd+Opt+Esc to force-quit, check free storage, or restart. For 'won't turn on', ask them to check the power cable and hold the power button for 10 seconds.",
+  wifi: "For WiFi/Internet: Turn WiFi off and on, forget the network and rejoin, or restart the router.",
+  email: "For Gmail/Calendar: Check internet connection, sign out and back in, ensure they are using their company Google Workspace account.",
+  software: "For Gong, Monday, Zoom, Adobe: Click 'Continue with Google' to use SSO, or try an Incognito window to clear cache/conflicts."
 };
 
 function parseTopic(s) {
@@ -89,14 +73,15 @@ const GEMINI_MODELS = process.env.GEMINI_MODEL
 const GEMINI_TIMEOUT_MS = 15000; // 15s — generous but prevents infinite hangs
 
 const AI_SYSTEM =
-  "You are a friendly, concise IT support assistant for a company's employees, chatting over WhatsApp. " +
-  "When the user describes a problem, provide the relevant troubleshooting steps from these company guidelines:\n" +
-  Object.keys(TOPICS).map(function(k) { return "- " + TOPICS[k].replace(/\n/g, ' '); }).join('\n') + "\n" +
-  "If the user's problem is not in the guidelines, do your best to provide short, relevant IT advice. " +
-  "Give short, clear, step-by-step help \u2014 2 to 4 sentences max, plain text only (no markdown, no bullet symbols, no asterisks). " +
-  "Ask one follow-up question at a time if you need more detail, or ask if the steps fixed it. " +
-  "If the user replies YES (problem solved), congratulate them briefly and ask if there's anything else. " +
-  "If the user replies NO (problem not solved), explicitly asks for a human, or if you have exhausted basic troubleshooting, tell them you've passed their ticket to the IT team who will respond within 4 hours. " +
+  "You are an expert, friendly IT Tier 1 Support Agent for our company, chatting with employees over WhatsApp. Your goal is to troubleshoot basic IT issues before escalating to a senior admin.\n" +
+  "When the user describes an issue, use these guidelines to help them:\n" +
+  Object.values(TOPICS).map(function(t) { return "- " + t; }).join('\n') + "\n" +
+  "If the issue is not explicitly listed, use your general IT knowledge to provide 1 or 2 practical troubleshooting steps.\n" +
+  "Give short, conversational, step-by-step help \u2014 2 to 4 sentences max. Use plain text only (no markdown, no bold asterisks, no bullet symbols).\n" +
+  "Ask one follow-up question at a time if you need more detail, or ask if the steps fixed it.\n" +
+  "If the user replies YES (solved), congratulate them briefly.\n" +
+  "If the user explicitly asks for a human, or if basic troubleshooting fails, tell them: 'I've escalated your ticket to our senior IT team. They will reach out within our 4-hour SLA.'\n" +
+  "Do not escalate immediately unless they ask for it or it's a critical hardware failure.\n" +
   "Never invent company-specific details, passwords, or links. Keep responses under 200 words.";
 
 let geminiModel = null; // cached working model id
@@ -179,19 +164,7 @@ async function assistantReply(msg, from, text) {
   var lower = String(text || '').toLowerCase();
   var trimmed = String(text || '').trim();
 
-  // Fast-path: if they typed exactly a single digit 1-7, bypass AI and serve the menu topic
-  if (/^[1-7]$/.test(trimmed)) {
-    var topic = parseTopic(lower);
-    if (topic === 'other') {
-      await botReply(msg, from, "Got it \u2014 I've passed your request to our IT team. They'll reach you within 4 hours. \u{1F64C}");
-      await supabase.from('chats').update({ bot_stage: 'escalated', updated_at: new Date().toISOString() }).eq('phone_number', from);
-      return;
-    }
-    if (topic && TOPICS[topic]) {
-      await botReply(msg, from, TOPICS[topic]);
-      return;
-    }
-  }
+  // Fast-path removed. We rely fully on Gemini to handle the conversation naturally.
 
   // 1. Try Gemini AI first (with full conversation history for context)
   if (GEMINI_API_KEY) {
