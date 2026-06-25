@@ -160,7 +160,7 @@ async function callGemini(history) {
 // ---------------------------------------------------------------------------
 //  assistantReply — AI with conversation context, then fallbacks
 // ---------------------------------------------------------------------------
-async function assistantReply(msg, from, text) {
+async function assistantReply(msg, from, text, chat) {
   var lower = String(text || '').toLowerCase();
   var trimmed = String(text || '').trim();
 
@@ -168,11 +168,18 @@ async function assistantReply(msg, from, text) {
 
   // 1. Try Gemini AI first (with full conversation history for context)
   if (GEMINI_API_KEY) {
-    var result = await supabase.from('chat_messages').select('direction, content')
-      .eq('phone_number', from).order('created_at', { ascending: true }).limit(30);
+    var query = supabase.from('chat_messages').select('direction, content').eq('phone_number', from);
+    if (chat && chat.sla_start) query = query.gte('created_at', chat.sla_start);
+    var result = await query.order('created_at', { ascending: true }).limit(30);
     var hist = result.data;
     var ai = await callGemini(hist && hist.length ? hist : [{ direction: 'inbound', content: text }]);
-    if (ai) { await botReply(msg, from, ai); return; }
+    if (ai) { 
+      await botReply(msg, from, ai); 
+      if (/escalat/i.test(ai) || /4-hour SLA/i.test(ai) || /passed your ticket/i.test(ai)) {
+        await supabase.from('chats').update({ bot_stage: 'escalated', updated_at: new Date().toISOString() }).eq('phone_number', from);
+      }
+      return; 
+    }
     console.log('[assistant] Gemini returned null, falling back to topic/FAQ/menu');
   }
 
@@ -334,7 +341,7 @@ async function handleMessage(msg) {
     if (chat.bot_stage === 'escalated') return; // already with the team -> bot stays quiet
 
     // Let the AI (or fallback chain) handle the reply
-    await assistantReply(msg, from, text);
+    await assistantReply(msg, from, text, chat);
   } catch (err) {
     console.error('[handleMessage] error:', err);
   }
