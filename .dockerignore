@@ -1,0 +1,7 @@
+node_modules
+.wwebjs_auth
+.env
+npm-debug.log
+Dockerfile
+docker-compose.yml
+DEPLOY.md

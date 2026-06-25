@@ -1,0 +1,25 @@
+# Render Blueprint — deploys the bot + built-in GUI dashboard as one service.
+# In Render: New → Blueprint → connect the repo containing these files.
+#
+# IMPORTANT: use a plan that does NOT sleep. Free web services spin down when
+# idle, which logs the WhatsApp session out and forces a QR re-scan. "starter"
+# stays on 24/7 and supports the persistent disk the session needs.
+services:
+  - type: web
+    name: whatsapp-it-bot
+    runtime: docker
+    plan: starter            # ~$7/mo, always-on. (Free sleeps — don't use it here.)
+    region: frankfurt        # pick the region closest to you
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: SUPABASE_URL
+        value: https://xzxqqtizascjsbcrtcha.supabase.co
+      - key: SUPABASE_KEY
+        sync: false          # paste your service_role key in the Render dashboard
+      - key: SUPABASE_ANON_KEY
+        sync: false          # paste your anon (public) key — used by the dashboard
+    disk:
+      name: wa-session
+      mountPath: /app/.wwebjs_auth   # persists the WhatsApp login across restarts/deploys
+      sizeGB: 1

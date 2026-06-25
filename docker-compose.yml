@@ -1,0 +1,13 @@
+services:
+  bot:
+    build: .
+    restart: unless-stopped          # auto-restart 24/7
+    ports:
+      - "3000:3000"                  # local dashboard (engine also has one built in)
+    env_file:
+      - .env
+    volumes:
+      - wa_session:/app/.wwebjs_auth # persists the WhatsApp login across restarts
+
+volumes:
+  wa_session:
