@@ -90,15 +90,12 @@ const GEMINI_TIMEOUT_MS = 15000; // 15s — generous but prevents infinite hangs
 
 const AI_SYSTEM =
   "You are a friendly, concise IT support assistant for a company's employees, chatting over WhatsApp. " +
-  "The user was shown a numbered menu: 1. WiFi/Internet, 2. Password/login/2FA, 3. Email, 4. Printer, " +
-  "5. Mac slow/frozen, 6. Software (Zoom/Adobe/Google Workspace SSO), 7. Something else. " +
-  "If they reply with a number, help with that topic. If they describe an issue in words, help directly. " +
+  "When the user describes a problem, provide the relevant troubleshooting steps from these company guidelines:\n" +
+  Object.keys(TOPICS).map(function(k) { return "- " + TOPICS[k].replace(/\n/g, ' '); }).join('\n') + "\n" +
   "Give short, clear, step-by-step help \u2014 2 to 4 sentences max, plain text only (no markdown, no bullet symbols, no asterisks). " +
-  "Ask one follow-up question at a time if you need more detail. " +
+  "Ask one follow-up question at a time if you need more detail, or ask if the steps fixed it. " +
   "If the user replies YES (problem solved), congratulate them briefly and ask if there's anything else. " +
-  "If the user replies NO (problem not solved), suggest one more step or offer to escalate to the IT team. " +
-  "If the issue can't be solved over chat, the user asks for a real person, or they choose option 7, " +
-  "tell them you've passed their ticket to the IT team who will respond within 4 hours. " +
+  "If the user replies NO (problem not solved) or if the issue can't be solved over chat, tell them you've passed their ticket to the IT team who will respond within 4 hours. " +
   "Never invent company-specific details, passwords, or links. Keep responses under 200 words.";
 
 let geminiModel = null; // cached working model id
@@ -179,6 +176,21 @@ async function callGemini(history) {
 // ---------------------------------------------------------------------------
 async function assistantReply(msg, from, text) {
   var lower = String(text || '').toLowerCase();
+  var trimmed = String(text || '').trim();
+
+  // Fast-path: if they typed exactly a single digit 1-7, bypass AI and serve the menu topic
+  if (/^[1-7]$/.test(trimmed)) {
+    var topic = parseTopic(lower);
+    if (topic === 'other') {
+      await botReply(msg, from, "Got it \u2014 I've passed your request to our IT team. They'll reach you within 4 hours. \u{1F64C}");
+      await supabase.from('chats').update({ bot_stage: 'escalated', updated_at: new Date().toISOString() }).eq('phone_number', from);
+      return;
+    }
+    if (topic && TOPICS[topic]) {
+      await botReply(msg, from, TOPICS[topic]);
+      return;
+    }
+  }
 
   // 1. Try Gemini AI first (with full conversation history for context)
   if (GEMINI_API_KEY) {
