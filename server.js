@@ -92,10 +92,11 @@ const AI_SYSTEM =
   "You are a friendly, concise IT support assistant for a company's employees, chatting over WhatsApp. " +
   "When the user describes a problem, provide the relevant troubleshooting steps from these company guidelines:\n" +
   Object.keys(TOPICS).map(function(k) { return "- " + TOPICS[k].replace(/\n/g, ' '); }).join('\n') + "\n" +
+  "If the user's problem is not in the guidelines, do your best to provide short, relevant IT advice. " +
   "Give short, clear, step-by-step help \u2014 2 to 4 sentences max, plain text only (no markdown, no bullet symbols, no asterisks). " +
   "Ask one follow-up question at a time if you need more detail, or ask if the steps fixed it. " +
   "If the user replies YES (problem solved), congratulate them briefly and ask if there's anything else. " +
-  "If the user replies NO (problem not solved) or if the issue can't be solved over chat, tell them you've passed their ticket to the IT team who will respond within 4 hours. " +
+  "If the user replies NO (problem not solved), explicitly asks for a human, or if you have exhausted basic troubleshooting, tell them you've passed their ticket to the IT team who will respond within 4 hours. " +
   "Never invent company-specific details, passwords, or links. Keep responses under 200 words.";
 
 let geminiModel = null; // cached working model id
@@ -478,13 +479,13 @@ function chatPage(chat) {
     '<button class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg px-4">Send</button></form>' +
     '</div></main>' +
     '<script>(function(){var PHONE=' + JSON.stringify(phone) + ';var log=document.getElementById("log");' +
-    'function esc(s){return String(s==null?"":s).replace(/[&<>\\"]/g,function(c){return ({"&":"&amp;","<":"&lt;",">":"&gt;","\\\\"":"&quot;"})[c];});}' +
+    'function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}' +
     'function render(items){var h="";for(var i=0;i<items.length;i++){var m=items[i];var out=m.direction==="outbound";' +
-    'h+="<div class=\\\\"flex "+(out?"justify-end":"justify-start")+"\\\\"><div class=\\\\"max-w-[80%] px-3 py-2 rounded-2xl text-sm "+(out?"bg-emerald-600 text-white":"bg-white border border-slate-200")+"\\\\">"+esc(m.content)+"</div></div>";}' +
+    'h+="<div class=\\"flex "+(out?"justify-end":"justify-start")+"\\"><div class=\\"max-w-[80%] px-3 py-2 rounded-2xl text-sm "+(out?"bg-emerald-600 text-white":"bg-white border border-slate-200")+"\\">"+esc(m.content)+"</div></div>";}' +
     'var atBottom=log.scrollHeight-log.scrollTop-log.clientHeight<60;log.innerHTML=h;if(atBottom)log.scrollTop=log.scrollHeight;}' +
-    'function load(){fetch("/api/messages?phone="+encodeURIComponent(PHONE)).then(function(r){return r.json();}).then(function(d){render(d.messages||[]);}).catch(function(){});}' +
+    'function load(){fetch("/api/messages?phone="+encodeURIComponent(PHONE), {credentials: "same-origin"}).then(function(r){return r.json();}).then(function(d){render(d.messages||[]);}).catch(function(){});}' +
     'document.getElementById("reply").addEventListener("submit",function(e){e.preventDefault();var t=document.getElementById("text");var v=t.value.trim();if(!v)return;t.value="";' +
-    'fetch("/api/reply",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:PHONE,text:v})}).then(function(){load();}).catch(function(){t.value=v;});});' +
+    'fetch("/api/reply",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:PHONE,text:v})}).then(function(){load();}).catch(function(){t.value=v;});});' +
     'load();setInterval(load,4000);})();</script>';
   return pageHead('Chat - ' + digits(phone), 0) + inner + '</body></html>';
 }
