@@ -45,20 +45,27 @@ const GREETING = 'Hey \u{1F44B}\n' +
 const MENU = 'What else can I help with? Just describe the issue.';
 
 const TOPICS = {
-  mac: "For macOS issues (slow, frozen): Press Cmd+Opt+Esc to force-quit, check free storage, or restart. For 'won't turn on', ask them to check the power cable and hold the power button for 10 seconds.",
-  wifi: "For WiFi/Internet: Turn WiFi off and on, forget the network and rejoin, or restart the router.",
-  email: "For Gmail/Calendar: Check internet connection, sign out and back in, ensure they are using their company Google Workspace account.",
-  software: "For Gong, Monday, Zoom, Adobe: Click 'Continue with Google' to use SSO, or try an Incognito window to clear cache/conflicts."
+  mac: "macOS: To force-quit a frozen app, press Cmd+Option+Esc. For general slowness, restart the Mac and check free storage in Apple menu > System Settings > General > Storage. If it will not power on, have them check the charger and hold the power button about 10 seconds. For stubborn issues try Safe Mode by holding Shift while booting.",
+  wifi: "WiFi / Internet: Toggle WiFi off and on, Forget the network and rejoin, or restart the router. If only company apps fail, check that the VPN is connected. As a last step, turn WiFi off for 30 seconds to renew the connection.",
+  login: "Login / SSO / 2FA: Most company apps use Sign in with Google (Google Workspace SSO) - have them click that rather than typing a password. If a 2FA code is rejected, set the phone clock to automatic and request a fresh code. Do not reset passwords yourself - escalate account lockouts.",
+  email: "Gmail / Google Calendar / Drive: Confirm they are signed into the company Google Workspace account, not a personal one. Try signing out and back in, or an Incognito window. For Google Drive desktop sync problems, quit and reopen Google Drive for desktop and confirm it is signed in.",
+  adobe: "Adobe (Creative Cloud / Acrobat): For a PDF that will not open, set Adobe Acrobat as the default PDF app and update it via Help > Check for Updates. For sign-in or trial expired errors, open the Creative Cloud desktop app and sign out then back in with the company Adobe account (or Continue with Google if SSO is used). If an app will not launch, restart the Creative Cloud app or reinstall that app from it.",
+  gong: "Gong: Sign in at app.gong.io with Sign in with Google using the company account. If call recordings are missing, check that the Gong calendar or Zoom integration is connected in Gong settings. If the browser extension misbehaves, use Chrome, clear the cache, or reinstall the extension.",
+  monday: "Monday.com: Sign in with Continue with Google SSO. If they cannot see a board it is usually a permissions issue - note the board name and escalate to an admin to grant access. For loading glitches, try an Incognito window or clear the browser cache.",
+  workspace: "Google Workspace (general): Everything uses the company Google account via SSO. For access or sharing-permission problems, note exactly what they cannot reach and escalate to an admin. For sync issues, sign out and back in or try Incognito.",
+  printer: "Printer: Make sure it is powered on and on the same WiFi network. Remove and re-add it in System Settings > Printers & Scanners, then print a test page."
 };
 
 function parseTopic(s) {
-  if (/(^|\s)1(\s|$|\.|\))/.test(s) || /\b(wifi|wi-fi|internet|network|connection)\b/.test(s)) return 'wifi';
-  if (/(^|\s)2(\s|$|\.|\))/.test(s) || /\b(password|login|log in|2fa|authenticator|sign in|code)\b/.test(s)) return 'password';
-  if (/(^|\s)3(\s|$|\.|\))/.test(s) || /\b(email|e-mail|gmail|outlook|mail)\b/.test(s)) return 'email';
-  if (/(^|\s)4(\s|$|\.|\))/.test(s) || /\b(printer|print|printing)\b/.test(s)) return 'printer';
-  if (/(^|\s)5(\s|$|\.|\))/.test(s) || /\b(mac|computer|laptop|slow|frozen|freeze|stuck|spinning)\b/.test(s)) return 'mac';
-  if (/(^|\s)6(\s|$|\.|\))/.test(s) || /\b(software|app|zoom|adobe|gong|monday|sso|teams|slack)\b/.test(s)) return 'software';
-  if (/(^|\s)7(\s|$|\.|\))/.test(s) || /\b(other|something else|else)\b/.test(s)) return 'other';
+  if (/\b(adobe|acrobat|photoshop|illustrator|premiere|creative cloud|pdf)\b/.test(s)) return 'adobe';
+  if (/\bgong\b/.test(s)) return 'gong';
+  if (/\bmonday\b/.test(s)) return 'monday';
+  if (/\b(google workspace|g ?suite|google drive|gdrive|docs|sheets|slides)\b/.test(s)) return 'workspace';
+  if (/\b(email|e-mail|gmail|outlook|mail|calendar)\b/.test(s)) return 'email';
+  if (/\b(password|login|log in|2fa|mfa|authenticator|sign in|sso|locked out|reset)\b/.test(s)) return 'login';
+  if (/\b(wifi|wi-fi|internet|network|connection|vpn)\b/.test(s)) return 'wifi';
+  if (/\b(printer|print|printing|scanner)\b/.test(s)) return 'printer';
+  if (/\b(mac|macos|macbook|laptop|computer|slow|frozen|freeze|stuck|spinning|turn on)\b/.test(s)) return 'mac';
   return null;
 }
 
@@ -73,15 +80,14 @@ const GEMINI_MODELS = process.env.GEMINI_MODEL
 const GEMINI_TIMEOUT_MS = 15000; // 15s — generous but prevents infinite hangs
 
 const AI_SYSTEM =
-  "You are an expert, friendly IT Tier 1 Support Agent for our company, chatting with employees over WhatsApp. Your goal is to troubleshoot basic IT issues before escalating to a senior admin.\n" +
-  "When the user describes an issue, use these guidelines to help them:\n" +
+  "You are an expert, friendly IT Tier 1 Support Agent for our company, chatting with employees over WhatsApp. The company runs on macOS laptops, Google Workspace (Gmail, Calendar, Drive), and SaaS apps including Adobe Creative Cloud and Acrobat, Gong, Monday.com, and Zoom, with Sign in with Google SSO for most apps. Your goal is to actually solve Tier-1 issues, escalating to a senior admin only when needed.\n" +
+  "Use this product knowledge when relevant:\n" +
   Object.values(TOPICS).map(function(t) { return "- " + t; }).join('\n') + "\n" +
-  "If the issue is not explicitly listed, use your general IT knowledge to provide 1 or 2 practical troubleshooting steps.\n" +
-  "Give short, conversational, step-by-step help \u2014 2 to 4 sentences max. Use plain text only (no markdown, no bold asterisks, no bullet symbols).\n" +
+  "For anything not covered, use your expert general IT knowledge (Windows, macOS, browsers, networking, hardware, common SaaS apps) to give concrete, practical steps. Always try to help first - do NOT reply that you have no information on a topic.\n" +
+  "Give short, conversational, step-by-step help - 2 to 4 sentences max. Use plain text only (no markdown, no bold asterisks, no bullet symbols).\n" +
   "Ask one follow-up question at a time if you need more detail, or ask if the steps fixed it.\n" +
   "If the user replies YES (solved), congratulate them briefly.\n" +
-  "If the user explicitly asks for a human, or if basic troubleshooting fails, tell them: 'I've escalated your ticket to our senior IT team. They will reach out within our 4-hour SLA.'\n" +
-  "Do not escalate immediately unless they ask for it or it's a critical hardware failure.\n" +
+  "Escalate ONLY when: the user explicitly asks for a human, the issue needs admin access (account lockouts, password resets, permission or license changes), or basic troubleshooting has failed after a couple of attempts. To escalate, say exactly: 'I have escalated your ticket to our senior IT team. They will reach out within our 4-hour SLA.'\n" +
   "Never invent company-specific details, passwords, or links. Keep responses under 200 words.";
 
 let geminiModel = null; // cached working model id
